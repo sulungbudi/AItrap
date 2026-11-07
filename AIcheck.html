@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Text Checker</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #677085;
+    --border: #dde1e8; --accent: #3b5bdb; --accent-text: #fff;
+    --human: #2f9e44; --mixed: #e8a20c; --ai: #e03131;
+    --g1: #b2f2bb; --g2: #ffec99; --g3: #ffc9c9; --g4: #d0bfff;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b1f27; --text: #e6e8ee; --muted: #9aa3b5;
+      --border: #2c323d; --accent: #748ffc; --accent-text: #0d1020;
+      --g1: #1f4d2b; --g2: #5c4b0f; --g3: #5e2323; --g4: #3f2d6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 28px 16px 60px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 22px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px; margin-bottom: 18px;
+  }
+  .panel h2 { font-size: 1.05rem; margin: 0 0 12px; }
+  label { font-size: .85rem; color: var(--muted); display: block; margin-bottom: 4px; }
+  select, input[type=text], textarea {
+    width: 100%; padding: 9px 11px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    font: inherit;
+  }
+  textarea { min-height: 220px; resize: vertical; line-height: 1.5; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+  .check { display: flex; gap: 8px; align-items: center; font-size: .9rem; color: var(--text); margin: 0; }
+  button {
+    padding: 10px 18px; border: 0; border-radius: 8px; font: inherit; font-weight: 600;
+    background: var(--accent); color: var(--accent-text); cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .counter { color: var(--muted); font-size: .85rem; margin-left: auto; }
+  #status { font-size: .9rem; color: var(--muted); min-height: 1.4em; margin-top: 10px; }
+  .progress { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 6px; display: none; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  .hidden { display: none !important; }
+
+  .verdict { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+  .big { font-size: 2.6rem; font-weight: 700; line-height: 1; }
+  .verdict-label { font-weight: 600; font-size: 1.1rem; }
+  .meter { position: relative; height: 14px; border-radius: 7px; margin: 16px 0 4px;
+    background: linear-gradient(90deg, var(--human), var(--mixed), var(--ai)); }
+  .meter .pin { position: absolute; top: -5px; width: 4px; height: 24px; background: var(--text);
+    border-radius: 2px; transform: translateX(-2px); transition: left .4s; }
+  .scale { display: flex; justify-content: space-between; font-size: .78rem; color: var(--muted); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: .78rem; font-weight: 600; color: #fff; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .stat { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: .8rem; color: var(--muted); }
+  .tokens { font-family: var(--mono); font-size: .86rem; line-height: 1.9; white-space: pre-wrap; word-break: break-word;
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px; max-height: 420px; overflow: auto; }
+  .tokens span { border-radius: 3px; }
+  .r1 { background: var(--g1); } .r2 { background: var(--g2); } .r3 { background: var(--g3); } .r4 { background: var(--g4); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); margin: 10px 0; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+  .note { font-size: .85rem; color: var(--muted); border-left: 3px solid var(--mixed); padding: 6px 12px; margin: 0; }
+  details summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>AI Text Checker</h1>
+  <p class="sub">Runs Hugging Face models locally in your browser with Transformers.js — your text never leaves this device.</p>
+
+  <section class="panel">
+    <h2>Settings</h2>
+    <div class="grid">
+      <div>
+        <label for="model">Detector model (text classification)</label>
+        <select id="model">
+          <option value="MedAliFarhat/ai-text-detector-onnx">RoBERTa AI-text detector (Fakespot, modern LLMs)</option>
+          <option value="onnx-community/roberta-base-openai-detector-ONNX">RoBERTa OpenAI detector (GPT-2 era)</option>
+          <option value="onnx-community/roberta-large-openai-detector-ONNX">RoBERTa-large OpenAI detector (GPT-2 era, larger)</option>
+          <option value="custom">Custom model ID…</option>
+        </select>
+        <input type="text" id="customModel" class="hidden" placeholder="e.g. user/my-detector-onnx" style="margin-top:8px">
+      </div>
+      <div>
+        <label for="device">Compute backend</label>
+        <select id="device">
+          <option value="wasm">CPU (WASM, quantized) — works everywhere</option>
+          <option value="webgpu">GPU (WebGPU) — faster if supported</option>
+        </select>
+      </div>
+      <div>
+        <label>Extra analysis</label>
+        <p class="check"><input type="checkbox" id="usePpl" checked> <span>Perplexity &amp; token-rank analysis (GPT-2)</span></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Text</h2>
+    <textarea id="input" placeholder="Paste the text to check here. Longer passages (150+ words) give more stable results. English works best."></textarea>
+    <div class="row">
+      <button id="analyze">Analyze</button>
+      <button id="sample" class="secondary">Load sample</button>
+      <button id="clear" class="secondary">Clear</button>
+      <span class="counter" id="counter">0 words</span>
+    </div>
+    <div id="status">Models download once on first use (≈125–250 MB), then load from browser cache.</div>
+    <div class="progress" id="progress"><div></div></div>
+  </section>
+
+  <section class="panel hidden" id="resultPanel">
+    <h2>Classifier result</h2>
+    <div class="verdict">
+      <div class="big" id="score">–</div>
+      <div>
+        <div class="verdict-label" id="verdict">–</div>
+        <div class="sub" style="margin:0" id="verdictSub"></div>
+      </div>
+    </div>
+    <div class="meter"><div class="pin" id="pin" style="left:0"></div></div>
+    <div class="scale"><span>Likely human</span><span>Uncertain</span><span>Likely AI</span></div>
+
+    <details style="margin-top:16px" open>
+      <summary>Per-segment scores</summary>
+      <table style="margin-top:8px">
+        <thead><tr><th>#</th><th>Segment</th><th>Words</th><th>AI prob.</th></tr></thead>
+        <tbody id="chunks"></tbody>
+      </table>
+    </details>
+  </section>
+
+  <section class="panel hidden" id="pplPanel">
+    <h2>Perplexity &amp; token-rank analysis (GPT-2)</h2>
+    <div class="stats">
+      <div class="stat"><b id="sPpl">–</b><span>Perplexity (lower = more predictable)</span></div>
+      <div class="stat"><b id="sBurst">–</b><span>Burstiness (sentence-to-sentence variation)</span></div>
+      <div class="stat"><b id="sTop10">–</b><span>Tokens in GPT-2's top-10 guesses</span></div>
+      <div class="stat"><b id="sTokens">–</b><span>Tokens analysed (max 1024)</span></div>
+    </div>
+    <p class="note" id="pplNote"></p>
+    <div class="legend">
+      <span><i class="r1"></i>rank 1–10</span>
+      <span><i class="r2"></i>rank 11–100</span>
+      <span><i class="r3"></i>rank 101–1000</span>
+      <span><i class="r4"></i>rank &gt; 1000</span>
+      <span>Hover a token for its rank and probability.</span>
+    </div>
+    <div class="tokens" id="tokens"></div>
+  </section>
+
+  <p class="note">AI-text detectors are probabilistic and make mistakes in both directions — especially on short, edited,
+    non-English, or highly formulaic text (and on writing by non-native speakers). Treat the score as one signal to
+    prompt a conversation, never as proof on its own.</p>
+</main>
+
+<script type="module">
+import {
+  pipeline, AutoTokenizer, AutoModelForCausalLM, Tensor, env
+} from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3';
+
+env.allowLocalModels = false;
+
+const $ = (id) => document.getElementById(id);
+const els = {
+  model: $('model'), custom: $('customModel'), device: $('device'), usePpl: $('usePpl'),
+  input: $('input'), analyze: $('analyze'), sample: $('sample'), clear: $('clear'),
+  counter: $('counter'), status: $('status'), progress: $('progress'),
+};
+
+const LM_ID = 'Xenova/gpt2';
+const cache = { clfKey: null, clf: null, lmKey: null, lm: null, tok: null };
+
+/* ---------- UI helpers ---------- */
+const wordCount = (s) => (s.trim().match(/\S+/g) || []).length;
+const escapeHtml = (s) => s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const setStatus = (msg) => { els.status.textContent = msg; };
+const colorFor = (p) => p >= 0.7 ? 'var(--ai)' : p <= 0.3 ? 'var(--human)' : 'var(--mixed)';
+
+function updateCounter() { els.counter.textContent = `${wordCount(els.input.value)} words`; }
+els.input.addEventListener('input', updateCounter);
+els.model.addEventListener('change', () => els.custom.classList.toggle('hidden', els.model.value !== 'custom'));
+els.clear.addEventListener('click', () => { els.input.value = ''; updateCounter(); });
+els.sample.addEventListener('click', () => {
+  els.input.value =
+`Photosynthesis is a fundamental biological process through which green plants, algae, and certain bacteria convert light energy into chemical energy. This process plays a crucial role in sustaining life on Earth, as it provides the primary source of energy for nearly all ecosystems. Furthermore, photosynthesis is responsible for producing the oxygen that most living organisms require for respiration.
+
+At its core, photosynthesis involves two main stages: the light-dependent reactions and the Calvin cycle. In the light-dependent reactions, chlorophyll absorbs sunlight, which is then used to split water molecules, releasing oxygen as a byproduct. The energy captured during this stage is stored in molecules such as ATP and NADPH. In the Calvin cycle, these energy-rich molecules are used to convert carbon dioxide into glucose, which serves as an essential energy source for the plant.
+
+Overall, understanding photosynthesis is essential not only for appreciating the complexity of life but also for addressing global challenges such as food security and climate change.`;
+  updateCounter();
+});
+
+const fileProgress = {};
+function progressCallback(p) {
+  if (p.status === 'progress' && p.file) {
+    fileProgress[p.file] = p.progress;
+    const vals = Object.values(fileProgress);
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    els.progress.style.display = 'block';
+    els.progress.firstElementChild.style.width = `${avg.toFixed(1)}%`;
+    setStatus(`Downloading ${p.name || ''} — ${p.file} (${p.progress.toFixed(0)}%)`);
+  } else if (p.status === 'ready') {
+    els.progress.style.display = 'none';
+  }
+}
+
+/* ---------- Model loading ---------- */
+function dtypesFor(device) { return device === 'webgpu' ? ['fp32', 'fp16'] : ['q8', 'fp32']; }
+
+async function loadWithFallback(loader, device) {
+  let lastErr;
+  for (const dtype of dtypesFor(device)) {
+    try { return await loader(dtype); }
+    catch (e) { lastErr = e; console.warn(`Load failed with dtype=${dtype}`, e); }
+  }
+  throw lastErr;
+}
+
+async function getClassifier() {
+  const id = els.model.value === 'custom' ? els.custom.value.trim() : els.model.value;
+  if (!id) throw new Error('Please enter a custom model ID.');
+  const device = els.device.value;
+  const key = `${id}|${device}`;
+  if (cache.clfKey === key) return cache.clf;
+  setStatus(`Loading detector ${id}…`);
+  for (const k in fileProgress) delete fileProgress[k];
+  cache.clf = await loadWithFallback(
+    (dtype) => pipeline('text-classification', id, { device, dtype, progress_callback: progressCallback }),
+    device);
+  cache.clfKey = key;
+  return cache.clf;
+}
+
+async function getLM() {
+  const device = els.device.value;
+  const key = `${LM_ID}|${device}`;
+  if (cache.lmKey === key) return { lm: cache.lm, tok: cache.tok };
+  setStatus('Loading GPT-2 for perplexity analysis…');
+  for (const k in fileProgress) delete fileProgress[k];
+  cache.tok = await AutoTokenizer.from_pretrained(LM_ID, { progress_callback: progressCallback });
+  cache.lm = await loadWithFallback(
+    (dtype) => AutoModelForCausalLM.from_pretrained(LM_ID, { device, dtype, progress_callback: progressCallback }),
+    device);
+  cache.lmKey = key;
+  return { lm: cache.lm, tok: cache.tok };
+}
+
+/* ---------- Text segmentation ---------- */
+function splitSentences(text) {
+  return (text.replace(/\s+/g, ' ').match(/[^.!?]+[.!?]+["')\]]*\s*|[^.!?]+$/g) || [])
+    .map(s => s.trim()).filter(Boolean);
+}
+
+// Group sentences into segments of ~maxWords so each fits the 512-token classifier window.
+function chunkText(text, maxWords = 250) {
+  const chunks = []; let cur = []; let n = 0;
+  for (const s of splitSentences(text)) {
+    const w = wordCount(s);
+    if (n + w > maxWords && cur.length) { chunks.push(cur.join(' ')); cur = []; n = 0; }
+    cur.push(s); n += w;
+  }
+  if (cur.length) chunks.push(cur.join(' '));
+  return chunks;
+}
+
+/* ---------- Label mapping ---------- */
+// Different detectors use different labels ("Fake"/"Real", "AI"/"Human", "LABEL_1"/"LABEL_0", ...).
+const AI_RE = /^(fake|ai|machine|generated|ai[-_ ]?generated|chatgpt|gpt|llm|label_1|1)$/i;
+const HUMAN_RE = /^(real|human|human[-_ ]?written|label_0|0)$/i;
+
+function aiProbability(scores) {
+  const ai = scores.find(s => AI_RE.test(s.label.trim()));
+  if (ai) return ai.score;
+  const human = scores.find(s => HUMAN_RE.test(s.label.trim()));
+  if (human) return 1 - human.score;
+  // single-label sigmoid models (e.g. label "AI" only) or unknown names
+  if (scores.length === 1) return scores[0].score;
+  console.warn('Unrecognised labels, assuming second label = AI:', scores);
+  return scores[1]?.score ?? 0.5;
+}
+
+/* ---------- Classifier run ---------- */
+async function runClassifier(text) {
+  const clf = await getClassifier();
+  const chunks = chunkText(text);
+  const results = [];
+  for (let i = 0; i < chunks.length; i++) {
+    setStatus(`Classifying segment ${i + 1} of ${chunks.length}…`);
+    let out = await clf(chunks[i], { top_k: null });
+    if (Array.isArray(out[0])) out = out[0];
+    results.push({ text: chunks[i], words: wordCount(chunks[i]), p: aiProbability(out), raw: out });
+  }
+  const totalW = results.reduce((a, r) => a + r.words, 0) || 1;
+  const overall = results.reduce((a, r) => a + r.p * r.words, 0) / totalW;
+  renderClassifier(overall, results);
+}
+
+function renderClassifier(p, results) {
+  $('resultPanel').classList.remove('hidden');
+  const pct = Math.round(p * 100);
+  $('score').textContent = `${pct}%`;
+  $('score').style.color = colorFor(p);
+  $('pin').style.left = `${pct}%`;
+  const label = p >= 0.85 ? 'Very likely AI-generated'
+    : p >= 0.6 ? 'Likely AI-generated'
+    : p > 0.4 ? 'Uncertain / possibly mixed'
+    : p > 0.15 ? 'Likely human-written'
+    : 'Very likely human-written';
+  $('verdict').textContent = label;
+  $('verdictSub').textContent = `Word-weighted average over ${results.length} segment${results.length > 1 ? 's' : ''}.`;
+  $('chunks').innerHTML = results.map((r, i) => {
+    const snip = r.text.length > 160 ? r.text.slice(0, 160) + '…' : r.text;
+    const rawLabels = r.raw.map(x => `${x.label}: ${(x.score * 100).toFixed(1)}%`).join(', ');
+    return `<tr title="${escapeHtml(rawLabels)}">
+      <td class="num">${i + 1}</td><td>${escapeHtml(snip)}</td><td class="num">${r.words}</td>
+      <td class="num"><span class="pill" style="background:${colorFor(r.p)}">${(r.p * 100).toFixed(1)}%</span></td></tr>`;
+  }).join('');
+}
+
+/* ---------- Perplexity / token-rank (GLTR-style) ---------- */
+async function runPerplexity(text) {
+  const { lm, tok } = await getLM();
+  setStatus('Computing token probabilities with GPT-2…');
+
+  const enc = await tok(text, { truncation: true, max_length: 1023 });
+  const BOS = 50256; // <|endoftext|>, so the first real token is also scored
+  const ids = [BOS, ...Array.from(enc.input_ids.data, Number)];
+  const n = ids.length;
+  const input_ids = new Tensor('int64', BigInt64Array.from(ids.map(BigInt)), [1, n]);
+  const attention_mask = new Tensor('int64', new BigInt64Array(n).fill(1n), [1, n]);
+
+  const { logits } = await lm({ input_ids, attention_mask });
+  const V = logits.dims[2];
+  const data = logits.data;
+  const offset = (logits.dims[1] - n) * V; // in case extra positions are returned
+
+  const tokens = [];
+  for (let t = 0; t < n - 1; t++) {
+    const base = offset + t * V;
+    const target = ids[t + 1];
+    const tl = Number(data[base + target]);
+    let max = -Infinity;
+    for (let v = 0; v < V; v++) { const x = Number(data[base + v]); if (x > max) max = x; }
+    let sum = 0, rank = 1;
+    for (let v = 0; v < V; v++) {
+      const x = Number(data[base + v]);
+      sum += Math.exp(x - max);
+      if (x > tl) rank++;
+    }
+    const logp = tl - max - Math.log(sum);
+    tokens.push({ id: target, str: tok.decode([target]), logp, rank });
+    if (t % 64 === 0) { setStatus(`Scoring tokens… ${t}/${n - 1}`); await new Promise(r => setTimeout(r)); }
+  }
+  renderPerplexity(tokens);
+}
+
+function renderPerplexity(tokens) {
+  $('pplPanel').classList.remove('hidden');
+  const N = tokens.length;
+  const meanNll = -tokens.reduce((a, t) => a + t.logp, 0) / N;
+  const ppl = Math.exp(meanNll);
+  const top10 = tokens.filter(t => t.rank <= 10).length / N;
+
+  // Burstiness: std. dev. of per-sentence perplexity, relative to the mean (coefficient of variation).
+  const sentPpl = []; let acc = 0, cnt = 0;
+  for (const t of tokens) {
+    acc += -t.logp; cnt++;
+    if (/[.!?]\s*$/.test(t.str) || /\n/.test(t.str)) { if (cnt >= 3) sentPpl.push(Math.exp(acc / cnt)); acc = 0; cnt = 0; }
+  }
+  if (cnt >= 3) sentPpl.push(Math.exp(acc / cnt));
+  let burst = NaN;
+  if (sentPpl.length >= 2) {
+    const m = sentPpl.reduce((a, b) => a + b, 0) / sentPpl.length;
+    const sd = Math.sqrt(sentPpl.reduce((a, b) => a + (b - m) ** 2, 0) / (sentPpl.length - 1));
+    burst = sd / m;
+  }
+
+  $('sPpl').textContent = ppl.toFixed(1);
+  $('sBurst').textContent = isNaN(burst) ? 'n/a' : burst.toFixed(2);
+  $('sTop10').textContent = `${(top10 * 100).toFixed(0)}%`;
+  $('sTokens').textContent = N;
+
+  const lowPpl = ppl < 25, highTop = top10 > 0.7, lowBurst = !isNaN(burst) && burst < 0.5;
+  const signals = [lowPpl, highTop, lowBurst].filter(Boolean).length;
+  $('pplNote').textContent =
+    (signals >= 2
+      ? 'Several statistical signals (low perplexity, many top-10 tokens, uniform sentences) are typical of LLM output. '
+      : signals === 1
+      ? 'Mixed statistical signals. '
+      : 'Text is relatively unpredictable to GPT-2, which is more typical of human writing. ')
+    + 'These are rough heuristics: GPT-2 is a small, English-centric model, and formal or technical human writing can also score low.';
+
+  $('tokens').innerHTML = tokens.map(t => {
+    const cls = t.rank <= 10 ? 'r1' : t.rank <= 100 ? 'r2' : t.rank <= 1000 ? 'r3' : 'r4';
+    const tip = `rank ${t.rank} · p = ${(Math.exp(t.logp) * 100).toFixed(2)}%`;
+    return `<span class="${cls}" title="${tip}">${escapeHtml(t.str)}</span>`;
+  }).join('');
+}
+
+/* ---------- Main ---------- */
+els.analyze.addEventListener('click', async () => {
+  const text = els.input.value.trim();
+  if (wordCount(text) < 20) { setStatus('Please enter at least 20 words — very short texts are unreliable.'); return; }
+  if (els.device.value === 'webgpu' && !navigator.gpu) {
+    setStatus('WebGPU is not available in this browser — switching to CPU (WASM).');
+    els.device.value = 'wasm';
+  }
+  els.analyze.disabled = true;
+  $('pplPanel').classList.add('hidden');
+  const t0 = performance.now();
+  try {
+    await runClassifier(text);
+    if (els.usePpl.checked) await runPerplexity(text);
+    setStatus(`Done in ${((performance.now() - t0) / 1000).toFixed(1)} s.`);
+  } catch (e) {
+    console.error(e);
+    setStatus(`Error: ${e.message || e}. If a custom model failed, check that it has ONNX weights for Transformers.js.`);
+  } finally {
+    els.analyze.disabled = false;
+    els.progress.style.display = 'none';
+  }
+});
+</script>
+</body>
+</html>
